@@ -1,0 +1,6 @@
+pandas
+numpy
+polygon-api-client
+tenacity
+plotly
+dash 
