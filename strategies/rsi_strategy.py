@@ -9,6 +9,8 @@ class RSIStrategy(BaseStrategy):
                  oversold: int = 30,
                  overbought: int = 70,
                  rsi_period: int = 14,
+                 max_positions: int = 5,  # Maximum number of concurrent positions
+                 position_size: float = 0.1,  # Base position size as fraction of capital
                  config: Optional[StrategyConfig] = None):
         """
         Long-only RSI-based mean reversion strategy
@@ -17,45 +19,57 @@ class RSIStrategy(BaseStrategy):
             oversold: Buy when RSI < this value
             overbought: Sell when RSI > this value
             rsi_period: Lookback window for RSI
+            max_positions: Maximum number of concurrent positions allowed
+            position_size: Base position size as fraction of total capital
         """
         super().__init__(config)
         self.oversold = oversold
         self.overbought = overbought
         self.rsi_period = rsi_period
+        self.max_positions = max_positions
+        self.position_size = position_size
 
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
-        # Initialize signals DataFrame with proper dtypes
-        signals = pd.DataFrame(index=data.index)
-        signals['signal'] = 0  # Default to HOLD
-        signals['position'] = 0  # Track current position (1 for long, 0 for none)
-        signals['rsi'] = np.nan  # Initialize RSI column
+        print(">>> generate_signals() with trade_weight column is running...")  # Debug: Ensure correct file is used
         
-        # Calculate RSI and generate signals without look-ahead bias
+        signals = pd.DataFrame(index=data.index)
+        signals['signal'] = 0
+        signals['position'] = 0
+        signals['rsi'] = np.nan
+        signals['trade_weight'] = 0.0  # Indicates strength of the signal
+        signals['active_positions'] = 0  # Track number of active positions
+
         for i in range(self.rsi_period, len(data)):
-            # Get data up to current point only
             current_data = data.iloc[:i+1]
             current_rsi = self._calculate_rsi_for_point(current_data)
             signals.iloc[i, signals.columns.get_loc('rsi')] = current_rsi
             
-            # Get previous position
-            prev_position = signals['position'].iloc[i-1]
+            # Update active positions count
+            if i > 0:
+                signals.iloc[i, signals.columns.get_loc('active_positions')] = signals.iloc[i-1]['active_positions']
             
-            # Generate signals based on current position and RSI
-            if prev_position == 0:  # No position
-                if current_rsi < self.oversold:
-                    signals.iloc[i, signals.columns.get_loc('signal')] = 1  # Buy
-                    signals.iloc[i, signals.columns.get_loc('position')] = 1
-            elif prev_position == 1:  # Long position
-                if current_rsi > self.overbought:
-                    signals.iloc[i, signals.columns.get_loc('signal')] = -1  # Sell
-                    signals.iloc[i, signals.columns.get_loc('position')] = 0
-                else:
-                    signals.iloc[i, signals.columns.get_loc('position')] = 1
-        
-        # Convert signal and position columns to int32 to avoid dtype warnings
+            # Buy logic
+            if current_rsi < self.oversold and signals.iloc[i]['active_positions'] < self.max_positions:
+                # Calculate signal strength (0 to 1)
+                signal_strength = (self.oversold - current_rsi) / self.oversold
+                
+                # Only take trade if signal is strong enough
+                if signal_strength > 0.2:  # Minimum threshold
+                    signals.iloc[i, signals.columns.get_loc('signal')] = 1
+                    signals.iloc[i, signals.columns.get_loc('trade_weight')] = (
+                        self.position_size * signal_strength
+                    )
+                    signals.iloc[i, signals.columns.get_loc('active_positions')] += 1
+
+            # Sell logic - check each position
+            elif current_rsi > self.overbought and signals.iloc[i]['active_positions'] > 0:
+                signal_strength = (current_rsi - self.overbought) / (100 - self.overbought)
+                if signal_strength > 0.2:  # Minimum threshold
+                    signals.iloc[i, signals.columns.get_loc('signal')] = -1
+                    signals.iloc[i, signals.columns.get_loc('trade_weight')] = signal_strength
+                    signals.iloc[i, signals.columns.get_loc('active_positions')] -= 1
+
         signals['signal'] = signals['signal'].astype('int32')
-        signals['position'] = signals['position'].astype('int32')
-        
         return signals
 
     def _calculate_rsi_for_point(self, data: pd.DataFrame) -> float:

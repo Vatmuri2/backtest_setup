@@ -11,36 +11,42 @@ def run_rsi_backtest():
     # Start timing
     start_time = time.time()
     
-    # Initialize components
     fetcher = DataFetcher("tAj9_5sMUEaQt0Y_m5fYkfF24dzMsSUp")
     simulator = TradeSimulator()
     
-    # Configure strategy
     strategy = RSIStrategy(
         oversold=30,
         overbought=70,
         rsi_period=14,
+        max_positions=5,  # Allow up to 5 concurrent positions
+        position_size=0.1,  # Use 10% of capital per position
         config=StrategyConfig(initial_balance=10000)
     )
     
-    # Fetch data
-    data = fetcher.get_historical_data("NVDL", "2023-01-01")
+    data = fetcher.get_historical_data("PLTR", "2023-01-01")
     
-    # Generate signals and execute
+    # Generate signals
     signals = strategy.generate_signals(data)
+
+    # Print active positions and trade weights for non-zero signals
+    print("\nTrade Analysis:")
+    trade_signals = signals[signals['signal'] != 0]
+    print(trade_signals[['rsi', 'signal', 'trade_weight', 'active_positions']])
+
     results = simulator.run(signals, data)
     
-    # Create dashboard
     create_dashboard(data, signals, results['trades'], results['metrics'])
     
-    # Calculate runtime
     runtime = time.time() - start_time
     
-    # Output results
     print(f"\nBacktest Results:")
     print(f"Initial Balance: ${results['metrics']['initial_balance']:,.2f}")
     print(f"Final Balance: ${results['metrics']['final_balance']:,.2f}")
+    print(f"Total Return: {((results['metrics']['final_balance'] / results['metrics']['initial_balance']) - 1):.1%}")
     print(f"Win Rate: {results['metrics']['win_rate']:.1%}")
+    print(f"Total Trades: {results['metrics']['total_trades']}")
+    print(f"Profit Factor: {results['metrics']['profit_factor']:.2f}")
+    print(f"Max Drawdown: {results['metrics']['max_drawdown']:.1%}")
     print(f"Runtime: {runtime:.2f} seconds")
     print(f"\nDashboard saved to: outputs/dashboard.html")
     
