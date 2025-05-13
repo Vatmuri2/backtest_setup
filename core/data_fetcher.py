@@ -15,6 +15,7 @@ class DataFetcher:
         Args:
             api_key: Polygon API key. Defaults to POLYGON_API_KEY environment variable.
         """
+        
         self.client = RESTClient(api_key or os.getenv("POLYGON_API_KEY"))
         self._last_request_time = None
         self._min_request_interval = 0.2  # 5 requests/second (Polygon free tier)
