@@ -3,12 +3,21 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Dict
 from core.trade_simulator import Trade
+import os
+from datetime import datetime
 
 def create_dashboard(data: pd.DataFrame, 
                     signals: pd.DataFrame,
                     trades: List[Trade],
                     metrics: Dict) -> None:
     """Create interactive dashboard with price and trade visualization"""
+    
+    # Create logs directory if it doesn't exist
+    os.makedirs('outputs/logs', exist_ok=True)
+    
+    # Generate unique filename with timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'outputs/logs/dashboard_{timestamp}.html'
     
     # Create figure with secondary y-axis
     fig = make_subplots(rows=2, cols=1, 
@@ -149,7 +158,8 @@ def create_dashboard(data: pd.DataFrame,
     )
 
     # Save to HTML file
-    fig.write_html('outputs/dashboard.html')
+    fig.write_html(filename)
+    return filename
 
 def calculate_equity_curve(trades: List[Trade], start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
     """Calculate equity curve from trades"""
