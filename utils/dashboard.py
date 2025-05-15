@@ -3,17 +3,27 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Dict
 from core.trade_simulator import Trade
+import os
+from datetime import datetime
 
 def create_dashboard(data: pd.DataFrame, 
                     signals: pd.DataFrame,
                     trades: List[Trade],
                     metrics: Dict) -> None:
-    """Create interactive dashboard with price, RSI, and trade visualization"""
+    """Create interactive dashboard with price and trade visualization"""
+    
+    # Create logs directory if it doesn't exist
+    os.makedirs('outputs/logs', exist_ok=True)
+    
+    # Generate unique filename with timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'outputs/logs/dashboard_{timestamp}.html'
     
     # Create figure with secondary y-axis
     fig = make_subplots(rows=2, cols=1, 
                        shared_xaxes=True,
                        vertical_spacing=0.05,
+                       subplot_titles=('Price & Trades', 'Daily Returns (%)'),
                        row_heights=[0.7, 0.3])
 
     # Add candlestick chart
@@ -29,54 +39,59 @@ def create_dashboard(data: pd.DataFrame,
         row=1, col=1
     )
 
-    # Add RSI
+    # Add daily returns
+    daily_returns = data['close'].pct_change() * 100  # Convert to percentage
     fig.add_trace(
         go.Scatter(
-            x=signals.index,
-            y=signals['rsi'],
-            name='RSI',
+            x=data.index,
+            y=daily_returns,
+            name='Daily Returns %',
             line=dict(color='purple')
         ),
         row=2, col=1
     )
 
-    # Add overbought/oversold lines
-    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-
     # Add buy/sell markers
     buy_signals = signals[signals['signal'] == 1]
     sell_signals = signals[signals['signal'] == -1]
 
-    fig.add_trace(
-        go.Scatter(
-            x=buy_signals.index,
-            y=data.loc[buy_signals.index, 'low'] * 0.99,  # Slightly below price
-            mode='markers',
-            name='Buy',
-            marker=dict(
-                symbol='triangle-up',
-                size=15,
-                color='green'
-            )
-        ),
-        row=1, col=1
-    )
+    if not buy_signals.empty:
+        marker_sizes = buy_signals['trade_weight'] * 50  # Scale weights for visibility
+        fig.add_trace(
+            go.Scatter(
+                x=buy_signals.index,
+                y=data.loc[buy_signals.index, 'low'] * 0.99,  # Slightly below price
+                mode='markers',
+                name='Buy',
+                marker=dict(
+                    symbol='triangle-up',
+                    size=marker_sizes,
+                    color='green'
+                ),
+                hovertemplate='Date: %{x}<br>Price: %{y}<br>Weight: %{text:.1%}<br>',
+                text=buy_signals['trade_weight']
+            ),
+            row=1, col=1
+        )
 
-    fig.add_trace(
-        go.Scatter(
-            x=sell_signals.index,
-            y=data.loc[sell_signals.index, 'high'] * 1.01,  # Slightly above price
-            mode='markers',
-            name='Sell',
-            marker=dict(
-                symbol='triangle-down',
-                size=15,
-                color='red'
-            )
-        ),
-        row=1, col=1
-    )
+    if not sell_signals.empty:
+        marker_sizes = sell_signals['trade_weight'] * 50  # Scale weights for visibility
+        fig.add_trace(
+            go.Scatter(
+                x=sell_signals.index,
+                y=data.loc[sell_signals.index, 'high'] * 1.01,  # Slightly above price
+                mode='markers',
+                name='Sell',
+                marker=dict(
+                    symbol='triangle-down',
+                    size=marker_sizes,
+                    color='red'
+                ),
+                hovertemplate='Date: %{x}<br>Price: %{y}<br>Weight: %{text:.1%}<br>',
+                text=sell_signals['trade_weight']
+            ),
+            row=1, col=1
+        )
 
     # Add trade annotations
     for trade in trades:
@@ -89,7 +104,7 @@ def create_dashboard(data: pd.DataFrame,
             fig.add_annotation(
                 x=trade.entry_date,
                 y=trade.entry_price,
-                text=f"Entry<br>${trade.entry_price:.2f}",
+                text=f"Entry<br>${trade.entry_price:.2f}<br>Weight: {trade.position_weight:.1%}",
                 showarrow=True,
                 arrowhead=1,
                 ax=0,
@@ -111,7 +126,7 @@ def create_dashboard(data: pd.DataFrame,
 
     # Update layout
     fig.update_layout(
-        title='RSI Strategy Backtest Results',
+        title='Trading Strategy Backtest Results',
         xaxis_title='Date',
         yaxis_title='Price',
         height=1000,
@@ -123,8 +138,10 @@ def create_dashboard(data: pd.DataFrame,
     metrics_text = (
         f"Initial Balance: ${metrics['initial_balance']:,.2f}<br>"
         f"Final Balance: ${metrics['final_balance']:,.2f}<br>"
+        f"Total Return: {((metrics['final_balance'] / metrics['initial_balance']) - 1):.1%}<br>"
         f"Win Rate: {metrics['win_rate']:.1%}<br>"
-        f"Total Trades: {metrics['total_trades']}"
+        f"Total Trades: {metrics['total_trades']}<br>"
+        f"Profit Factor: {metrics['profit_factor']:.2f}"
     )
     
     fig.add_annotation(
@@ -141,7 +158,8 @@ def create_dashboard(data: pd.DataFrame,
     )
 
     # Save to HTML file
-    fig.write_html('outputs/dashboard.html')
+    fig.write_html(filename)
+    return filename
 
 def calculate_equity_curve(trades: List[Trade], start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
     """Calculate equity curve from trades"""
