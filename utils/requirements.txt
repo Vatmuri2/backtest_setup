@@ -3,4 +3,6 @@ numpy
 polygon-api-client
 tenacity
 plotly
-dash 
+dash
+matplotlib
+seaborn 

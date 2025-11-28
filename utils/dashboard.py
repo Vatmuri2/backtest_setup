@@ -2,6 +2,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Dict
+import webbrowser
+import http.server
+import socketserver
+import threading
+import os
+from pathlib import Path
 from core.trade_simulator import Trade
 
 def create_dashboard(data: pd.DataFrame, 
@@ -149,7 +155,11 @@ def create_dashboard(data: pd.DataFrame,
     )
 
     # Save to HTML file
-    fig.write_html('outputs/dashboard.html')
+    dashboard_path = Path('outputs/dashboard.html')
+    dashboard_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(str(dashboard_path))
+    
+    return str(dashboard_path)
 
 def calculate_equity_curve(trades: List[Trade], start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
     """Calculate equity curve from trades"""
@@ -161,4 +171,56 @@ def calculate_equity_curve(trades: List[Trade], start_date: pd.Timestamp, end_da
             pnl = (trade.exit_price - trade.entry_price) * trade.shares
             equity[trade.exit_date:] += pnl
     
-    return pd.DataFrame({'equity': equity}) 
+    return pd.DataFrame({'equity': equity})
+
+def open_dashboard_server(dashboard_path: str, port: int = 8000):
+    """
+    Start a local web server and open the dashboard in browser
+    
+    Args:
+        dashboard_path: Path to the HTML dashboard file
+        port: Port number for the web server
+    
+    Returns:
+        The HTTP server instance (running in background thread)
+    """
+    dashboard_path = Path(dashboard_path)
+    dashboard_dir = dashboard_path.parent
+    dashboard_file = dashboard_path.name
+    
+    class DashboardHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(dashboard_dir), **kwargs)
+        
+        def log_message(self, format, *args):
+            # Suppress server logs
+            pass
+    
+    # Change to dashboard directory
+    original_dir = os.getcwd()
+    os.chdir(dashboard_dir)
+    
+    try:
+        # Start server in a separate thread
+        httpd = socketserver.TCPServer(("", port), DashboardHandler)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+        
+        # Open browser
+        url = f"http://localhost:{port}/{dashboard_file}"
+        print(f"\n{'='*60}")
+        print(f"📊 Dashboard Server Started!")
+        print(f"🌐 Opening dashboard at: {url}")
+        print(f"🖥️  Server running on port {port}")
+        print(f"💡 Dashboard will stay open - close browser tab when done")
+        print(f"{'='*60}\n")
+        
+        # Small delay to ensure server is ready
+        import time
+        time.sleep(0.5)
+        webbrowser.open(url)
+        
+        return httpd
+        
+    finally:
+        os.chdir(original_dir) 

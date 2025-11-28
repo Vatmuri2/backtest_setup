@@ -1,16 +1,16 @@
 """Strategy implementations - signal generation logic"""
 from .base_strategy import BaseStrategy, StrategyConfig
-from .rsi_strategy import RSIStrategy
+from .mean_reversion_strategy import MeanReversionStrategy
 
 __all__ = [
     'BaseStrategy',
     'StrategyConfig',
-    'RSIStrategy'
+    'MeanReversionStrategy'
 ]
 
 # Optional strategy registry
 STRATEGY_CLASSES = {
-    'rsi': RSIStrategy,
+    'mean_reversion': MeanReversionStrategy,
     # Add new strategies here as you create them
 }
 

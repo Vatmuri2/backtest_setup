@@ -1,11 +1,17 @@
 """Core backtesting components - data handling and trade execution"""
 from .data_fetcher import DataFetcher
 from .trade_simulator import TradeSimulator, Trade
+from .monte_carlo import MonteCarloSimulator
+from .backtest_engine import BacktestEngine
+from .metrics import MetricsCalculator
 
 __all__ = [
     'DataFetcher',
     'TradeSimulator',
-    'Trade'
+    'Trade',
+    'MonteCarloSimulator',
+    'BacktestEngine',
+    'MetricsCalculator'
 ]
 
 # Version-aware imports

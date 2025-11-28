@@ -71,11 +71,20 @@ class TradeSimulator:
         df['Signal'] = signals['signal']
         df['trade_weight'] = signals['trade_weight']
         
+        # Track equity curve
+        equity_curve = pd.Series(index=market_data.index, dtype=float)
+        
         for idx, row in df.iterrows():
             current_price = row["close"]
             
             # Update all open positions
             self._update_positions(current_price, idx)
+            
+            # Calculate current portfolio value
+            positions_value = sum(
+                pos.shares * current_price for pos in self.positions
+            )
+            equity_curve[idx] = self.balance + positions_value
             
             signal = row["Signal"]
             trade_weight = row["trade_weight"]
@@ -99,6 +108,12 @@ class TradeSimulator:
                             exit_date=idx,
                             reason="SIGNAL"
                         )
+            
+            # Update equity curve after trades
+            positions_value = sum(
+                pos.shares * current_price for pos in self.positions
+            )
+            equity_curve[idx] = self.balance + positions_value
 
         # Close any remaining positions with last price
         final_price = market_data.iloc[-1]['close']
@@ -110,10 +125,14 @@ class TradeSimulator:
                 reason="BACKTEST_END"
             )
         
+        # Final equity value
+        equity_curve[market_data.index[-1]] = self.balance
+        
         return {
             'trades': self.trade_history,
             'positions': self.positions,
             'balance': self.balance,
+            'equity_curve': equity_curve,
             'metrics': self._calculate_metrics()
         }
 
